@@ -32,11 +32,10 @@ const S = {
 };
 
 /* ═══════════════════════════════════════════════════════════════════
- * V26 ULTRA: KALMAN FILTER
+ * V26 ULTRA: KALMAN FILTER (Đã fix lỗi self)
  * ═══════════════════════════════════════════════════════════════════ */
 class KalmanFilter {
   constructor(Q = 0.008, R = 0.08) {
-    self = this;
     this.x = 0.5;
     this.P = 1.0;
     this.Q = Q;
@@ -263,7 +262,7 @@ class CasaDetector {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
- * MODULE PATTERN LIBRARY (67 MẪU CẦU MD5)
+ * MODULE PATTERN LIBRARY
  * ═══════════════════════════════════════════════════════════════════ */
 class PatternMatcher {
   static matchAll(seq) {
@@ -271,7 +270,6 @@ class PatternMatcher {
     const results = [];
     const last = seq[seq.length - 1];
     
-    // Check Bệt
     let streak = 1;
     for (let i = seq.length - 2; i >= 0; i--) {
       if (seq[i] === last) streak++;
@@ -285,7 +283,6 @@ class PatternMatcher {
       });
     }
 
-    // Check 1-1 / 2-2 / 1-2
     let alt = 0;
     for (let i = 1; i < seq.length; i++) if (seq[i] !== seq[i - 1]) alt++;
     const altRatio = alt / (seq.length - 1);
@@ -302,7 +299,7 @@ class PatternMatcher {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
- * V26 ULTRA & UPIS: FULL INTEGRATED ENGINE
+ * UNIFIED ENGINE
  * ═══════════════════════════════════════════════════════════════════ */
 class UnifiedEngine {
   constructor() {
@@ -372,11 +369,9 @@ class UnifiedEngine {
     const seq = history.map(h => h.result === 'Tài' ? 'T' : 'X');
     const pts = history.map(h => h.totalScore).filter(p => p !== undefined && p !== null);
 
-    // Reset & Feed Casa
     this.casa.reset();
     pts.slice(-60).forEach(p => this.casa.feed(p));
 
-    // Calculate All Models
     const flow = this._flow(seq);
     const markov = this._markov(seq);
     const perceptron = this._perceptron(seq);
@@ -392,7 +387,6 @@ class UnifiedEngine {
       lz: lz.prediction, context: ctx ? ctx.prediction : null, casa: casa.bias
     };
 
-    // Meta Ensemble Voting
     let votes = { Tài: 0.0, Xỉu: 0.0 };
     if (flow.pred) votes[flow.pred] += flow.conf * this.weights.flow;
     if (markov.pred) votes[markov.pred] += markov.conf * this.weights.markov;
@@ -409,7 +403,6 @@ class UnifiedEngine {
     let rawPred = votes.Tài >= votes.Xỉu ? 'Tài' : 'Xỉu';
     let rawConf = totalVotes > 0 ? Math.max(votes.Tài, votes.Xỉu) / totalVotes : 0.5;
 
-    // Kalman Filter Smoothing
     const smoothed = this.kalman.update(rawPred === 'Tài' ? 1.0 : 0.0);
     const finalPred = smoothed >= 0.5 ? 'Tài' : 'Xỉu';
     const finalConf = Math.round(S.clamp((rawConf + Math.abs(smoothed - 0.5) * 2) / 2 * 100, 50, 98));
@@ -434,14 +427,12 @@ class UnifiedEngine {
     if (!this.lastPred || !actual) return;
     const target = actual === 'Tài' ? 1.0 : 0.0;
 
-    // 1. Reinforcement Weight Tuning
     for (const [name, pred] of Object.entries(this.lastModelPreds)) {
       if (!pred) continue;
       if (pred === actual) this.weights[name] = Math.min(2.5, (this.weights[name] || 1.0) * 1.05);
       else this.weights[name] = Math.max(0.2, (this.weights[name] || 1.0) * 0.95);
     }
 
-    // 2. Train Perceptron via SGD
     if (this.lastFeatures) {
       const act = this.lastFeatures.reduce((s, f, i) => s + f * this.perceptron.w[i], this.perceptron.b);
       const predY = S.sigmoid(act);
@@ -480,7 +471,6 @@ function processData(data) {
   const rawList = data.list || (Array.isArray(data) ? data : []);
   if (!rawList.length) return;
 
-  // Transform and sort CHRONOLOGICALLY (Oldest -> Newest)
   const items = rawList.map(row => ({
     id: parseInt(row.id),
     result: (row.resultTruyenThong || row.result || '').toUpperCase() === 'TAI' ? 'Tài' : 'Xỉu',
@@ -493,13 +483,11 @@ function processData(data) {
   const topItem = items[items.length - 1];
   const topId = topItem.id;
 
-  // Merge Into State Sessions
   const existing = new Set(state.sessions.map(s => s.id));
   for (const s of items) if (!existing.has(s.id)) state.sessions.push(s);
   state.sessions.sort((a, b) => a.id - b.id);
   if (state.sessions.length > MAX_SESSIONS) state.sessions = state.sessions.slice(-MAX_SESSIONS);
 
-  // Check Pending Prediction Outcome
   if (state.pendingPrediction) {
     const target = state.sessions.find(s => s.id === state.pendingPrediction.forId);
     if (target) {
@@ -515,7 +503,6 @@ function processData(data) {
     }
   }
 
-  // Generate Prediction for Next Session
   if (state.lastTopId !== topId) {
     state.lastTopId = topId;
     const nextId = topId + 1;
@@ -571,7 +558,6 @@ app.use((req, res, next) => {
   next();
 });
 
-/* GET / — Feed dự đoán chính */
 app.get('/', (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 50, 300);
   res.json({
@@ -583,7 +569,6 @@ app.get('/', (req, res) => {
   });
 });
 
-/* GET /current — Lấy dự đoán mới nhất */
 app.get('/current', (req, res) => {
   res.json({
     success: true,
@@ -592,7 +577,6 @@ app.get('/current', (req, res) => {
   });
 });
 
-/* GET /stats — Thống kê tỷ lệ thắng */
 app.get('/stats', (req, res) => {
   const resolved = state.predictions.filter(p => p.KetQua && !p.KetQua.includes('Đang chờ'));
   const correct = resolved.filter(p => p.KetQua.includes('ĐÚNG')).length;
